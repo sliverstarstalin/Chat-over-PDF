@@ -5,6 +5,7 @@ import time
 import uuid
 from pathlib import Path
 import urllib.parse
+import argparse
 
 import streamlit as st
 
@@ -12,6 +13,10 @@ from ingest import extract_text, chunk_pages
 from embeddings import embed_chunks
 from indexer import build_faiss_index
 from qa import answer_question
+
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument("--local", action="store_true", help="Use local phi-3.5 server")
+ARGS, _ = parser.parse_known_args()
 
 
 RAW_DIR = Path("data/raw")
@@ -83,17 +88,18 @@ with right_col:
     st.header("Answer")
     if ask and question:
         start = time.perf_counter()
-        ans = answer_question(question)
+        ans = answer_question(question, local=ARGS.local)
         elapsed = time.perf_counter() - start
 
         st.markdown(ans.text)
 
         with st.expander("Sources"):
-            for page in sorted(ans.citations):
+            for cit in ans.citations:
                 pdf = selected[0] if selected else docs[0] if docs else "document"
                 file_path = RAW_DIR / f"{pdf}.pdf"
                 file_url = urllib.parse.quote(str(file_path))
-                viewer = f"https://mozilla.github.io/pdf.js/web/viewer.html?file={file_url}#page={page}"
-                st.markdown(f"- [Page {page}]({viewer})")
+                highlight = urllib.parse.quote(cit.snippet)
+                viewer = f"viewer.html?file={file_url}&page={cit.page}&highlight={highlight}"
+                st.markdown(f"- [Page {cit.page}]({viewer})")
 
         log_interaction(st.session_state["session_id"], question, elapsed)

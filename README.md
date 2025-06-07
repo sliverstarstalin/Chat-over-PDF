@@ -31,9 +31,14 @@ flowchart TD
    ```bash
    python app/build_index.py data/raw/*.pdf
    ```
+   Pages without extractable text are OCRed automatically using Tesseract.
 3. Start the app
    ```bash
    streamlit run app/main.py
+   ```
+   Use `--local` after `--` to talk to a local LM Studio server:
+   ```bash
+   streamlit run app/main.py -- --local
    ```
 
 Add `OPENAI_API_KEY` to a `.env` file to use OpenAI embeddings.
