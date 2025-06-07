@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections import namedtuple
+from dataclasses import dataclass
 from pathlib import Path
 import re
 from typing import List
@@ -12,6 +12,7 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.docstore.document import Document
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
 
 from embeddings import get_embed_model
 from ingest import Chunk, extract_text
@@ -22,6 +23,9 @@ RAW_DIR = Path("data/raw")
 _index = None
 _meta: List[dict] | None = None
 _page_cache: dict[str, list[str]] = {}
+
+# Conversation memory for chat sessions
+memory = ConversationBufferMemory()
 
 
 def _load_index() -> tuple[faiss.IndexFlatL2, List[dict]]:
@@ -63,22 +67,54 @@ def retrieve(query: str, k: int = 4) -> list[Chunk]:
 
 QA_PROMPT = (
     "Use only the CONTEXT to answer. Cite pages as (p ##).\n"
+    "{history}\n"
     "CONTEXT:\n{context}\nQ:{question}\nA:"
 )
 
-Answer = namedtuple("Answer", ["text", "citations"])
+
+@dataclass
+class Citation:
+    page: int
+    snippet: str
 
 
-def answer_question(query: str) -> Answer:
-    """Run RetrievalQA with prompt above; parse citations into a set of page ints."""
+@dataclass
+class Answer:
+    text: str
+    citations: List[Citation]
+
+
+def answer_question(query: str, *, local: bool = False) -> Answer:
+    """Run RetrievalQA with conversation memory and optional local LLM."""
     chunks = retrieve(query)
     docs = [Document(page_content=c.text, metadata={"page": c.page}) for c in chunks]
 
-    prompt = PromptTemplate(input_variables=["context", "question"], template=QA_PROMPT)
-    llm = ChatOpenAI()
+    history = memory.load_memory_variables({}).get("history", "")
+    prompt = PromptTemplate(
+        input_variables=["context", "question", "history"],
+        template=QA_PROMPT,
+    )
+
+    if local:
+        llm = ChatOpenAI(
+            base_url="http://localhost:1234/v1",
+            api_key="lm-studio",
+            model="phi-3.5-mini",
+        )
+    else:
+        llm = ChatOpenAI()
+
     chain = load_qa_chain(llm, chain_type="stuff", prompt=prompt)
-    result = chain.invoke({"input_documents": docs, "question": query})
+    result = chain.invoke({"input_documents": docs, "question": query, "history": history})
     text = result["output_text"] if isinstance(result, dict) else str(result)
 
     pages = set(int(p) for p in re.findall(r"\(p (\d+)\)", text))
-    return Answer(text=text, citations=pages)
+    citation_map = {}
+    for c in chunks:
+        if c.page in pages and c.page not in citation_map and c.text.strip():
+            snippet = c.text.replace("\n", " ")[:200]
+            citation_map[c.page] = snippet
+    citations = [Citation(page=p, snippet=s) for p, s in citation_map.items()]
+
+    memory.save_context({"question": query}, {"answer": text})
+    return Answer(text=text, citations=citations)

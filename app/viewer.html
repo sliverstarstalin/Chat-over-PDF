@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>PDF Viewer</title>
+  <style>
+    html, body, #viewer { height: 100%; margin: 0; }
+    #viewer { position: relative; }
+    canvas { width: 100%; }
+    .highlight { background: yellow; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js"></script>
+</head>
+<body>
+<div id="viewer"></div>
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const pdfPath = params.get('file');
+  const page = parseInt(params.get('page') || '1');
+  const highlight = params.get('highlight') || '';
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+  pdfjsLib.getDocument(pdfPath).promise.then(pdf => {
+    pdf.getPage(page).then(pg => {
+      const viewport = pg.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      document.getElementById('viewer').appendChild(canvas);
+      pg.render({ canvasContext: ctx, viewport }).promise.then(() => {
+        if (highlight) {
+          pg.getTextContent().then(tc => {
+            const textLayer = document.createElement('div');
+            textLayer.style.position = 'absolute';
+            textLayer.style.left = 0;
+            textLayer.style.top = 0;
+            textLayer.style.height = canvas.height + 'px';
+            textLayer.style.width = canvas.width + 'px';
+            document.getElementById('viewer').appendChild(textLayer);
+            pdfjsLib.renderTextLayer({
+              textContent: tc,
+              container: textLayer,
+              viewport,
+              textDivs: []
+            }).promise.then(() => {
+              const regex = new RegExp(highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+              textLayer.querySelectorAll('span').forEach(span => {
+                if (regex.test(span.textContent)) {
+                  span.classList.add('highlight');
+                }
+              });
+            });
+          });
+        }
+      });
+    });
+  });
+</script>
+</body>
+</html>

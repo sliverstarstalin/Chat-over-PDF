@@ -15,6 +15,8 @@ dependencies = [
     "pypdf",
     "streamlit>=1.45",
     "python-dotenv",
+    "pytesseract",
+    "pdf2image",
 ]
 
 [tool.setuptools.packages.find]
