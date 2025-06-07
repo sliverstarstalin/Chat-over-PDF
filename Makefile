@@ -1,12 +1,12 @@
 install:
-pip install -e .
+	pip install -e .
 
 dev:
-ruff .
-pytest
+	pre-commit run --all-files
+	pytest
 
 start:
-streamlit run app/main.py
+	streamlit run app/main.py
 
 test:
-pytest -q
+	pytest -q
