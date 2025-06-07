@@ -23,10 +23,17 @@ flowchart TD
 
 ## How to run locally
 
-1. Install dependencies
+1. Install dependencies (requires **Streamlit ≥1.45**)
    ```bash
    pip install -e .
    ```
+   If you install packages manually, make sure your Streamlit version is at
+   least `1.45`:
+   ```bash
+   pip install "streamlit>=1.45"
+   ```
+   Older versions will raise a `TypeError` in `st.set_page_config` due to the
+   missing `theme` parameter.
 2. Place your PDFs in `data/raw/` and build the index
    ```bash
    python app/build_index.py data/raw/*.pdf
